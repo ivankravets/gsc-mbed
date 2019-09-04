@@ -10,7 +10,7 @@ Library is used in Embedded System to connect to Goldeneye Hubs System.
 
 2. Copy `gsc-services.json` to folder `data` in your project PlatformIO (create folder `data` if it is not existed).
 
-3. Copy folder `grpc` + `gsclib` to folder `lib` in your project PlatformIO.
+3. Run command: `pio install GSCMbedLib`.
 
 4. This library uses [`nanopb`](https://github.com/nanopb/nanopb) to parse messages, you need to download and keep below files in folder `lib/grpc` of your project PlatformIO (create folder `grpc` if it is not existed)
 - pb.h
