@@ -12,6 +12,15 @@ Library is used in Embedded System to connect to Goldeneye Hubs System.
 
 3. Copy folder `grpc` + `gsclib` to folder `lib` in your project PlatformIO.
 
+4. This library uses [`nanopb`](https://github.com/nanopb/nanopb) to parse messages, you need to download and keep below files in folder `lib/grpc` of your project PlatformIO (create folder `grpc` if it is not existed)
+- pb.h
+- pb_common.c
+- pb_common.h
+- pb_decode.c
+- pb_decode.h
+- pb_encode.c
+- pb_encode.h
+
 ## Example
 
 ```c++
