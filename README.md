@@ -12,7 +12,7 @@ Library is used in Embedded System to connect to Goldeneye Hubs System.
 
 3. Run command: `pio install GSCMbedLib`.
 
-4. In dependency Nanopb
+4. In file `pb.h` of dependency Nanopb
 ```c++
 // Uncomment this line
 #define PB_FIELD_16BIT 1
