@@ -12,6 +12,15 @@ Library is used in Embedded System to connect to Goldeneye Hubs System.
 
 3. Run command: `pio install GSCMbedLib`.
 
+4. In dependency Nanopb
+```c++
+// Uncomment this line
+#define PB_FIELD_16BIT 1
+
+// Add this line 
+#define PB_WITHOUT_64BIT 1
+```
+
 ## Note
 After running command `pio install GSCMbedLib`, PlatformIO will install GSCMbedLib and dependencies into your project.
 
