@@ -16,6 +16,7 @@
             "maintainer": true
         }
     ],
+    "examples": "examples/*/*.cpp",
     "dependencies":
     [
         {
