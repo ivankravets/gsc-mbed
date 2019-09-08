@@ -12,7 +12,8 @@ Library is used in Embedded System to connect to Goldeneye Hubs System.
 
 3. Run command: `pio install GSCMbedLib`.
 
-4. This library uses [`nanopb`](https://github.com/nanopb/nanopb) to parse messages, you need to [download](https://github.com/gecosys/gsc-mbed-grpc) and keep some files in folder `lib/grpc` of your project PlatformIO (create folder `grpc` if it is not existed)
+## Note
+After running command `pio install GSCMbedLib`, PlatformIO will install GSCMbedLib and dependencies into your project.
 
 ## Example
 
@@ -84,3 +85,7 @@ void loop() {
   lastTime = millis();
 }
 ```
+
+## Dependencies
+- [ArduinoJSON](https://github.com/bblanchon/ArduinoJson) - 6.12.0
+- [Nanopb](https://github.com/nanopb/nanopb) - 0.3.9.2
