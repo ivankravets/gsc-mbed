@@ -105,9 +105,8 @@ namespace gelib {
         };
     }
 
-    JsonObject& buildParamsRegistration(const char *aliasName, const char *id, const char *password) {
-        StaticJsonBuffer<512> req;
-        JsonObject& params = req.createObject();
+    StaticJsonDocument<512> buildParamsRegistration(const char *aliasName, const char *id, const char *password) {
+        StaticJsonDocument<512> params;
         params["Id"] = id;
         params["Token"] = password;
         params["AliasName"] = aliasName;
@@ -115,9 +114,8 @@ namespace gelib {
         return params;
     }
 
-    JsonObject& buildParamsRenameConnection(const char *aliasName, const char *id, const char *token) {
-        StaticJsonBuffer<512> req;
-        JsonObject& params = req.createObject();
+    StaticJsonDocument<512> buildParamsRenameConnection(const char *aliasName, const char *id, const char *token) {
+        StaticJsonDocument<512> params;
         params["Id"] = id;
         params["Token"] = token;
         params["AliasName"] = aliasName;
@@ -201,7 +199,8 @@ void GEHClient::open(const char *aliasName) {
     }
 
     this->isOpened = true;
-    JsonObject& config = StaticJsonBuffer<512>().parse(strConfig);
+    StaticJsonDocument<512> config;
+    deserializeJson(config, strConfig);
     this->baseURL = String(config["host"].as<char *>());
     strcpy(this->info.id, config["id"].as<char *>());
     strcpy(this->info.password, config["token"].as<char *>());
@@ -225,12 +224,12 @@ bool GEHClient::renameConnection(const char *aliasName) {
         return false;
     }
 
-    JsonObject& params = gelib::buildParamsRenameConnection(
+    auto params = gelib::buildParamsRenameConnection(
         aliasName,
         this->clientInfo.id,
         this->clientInfo.token
     );
-    params.printTo(reqBuffer, 512);
+    serializeJson(params, reqBuffer);
 
     HTTPClient http;
     http.begin(this->baseURL + URL_RENAME_CONNECTION);
@@ -242,8 +241,9 @@ bool GEHClient::renameConnection(const char *aliasName) {
     http.getString().toCharArray(resBuffer, 512);
     http.end();
 
-    JsonObject& res = StaticJsonBuffer<512>().parse(resBuffer);
-    if (res.success() == false || res.containsKey("Data") == false || res["ReturnCode"] < 1) {
+    StaticJsonDocument<512> doc;
+    auto err = deserializeJson(doc, resBuffer);
+    if (err || doc.containsKey("Data") == false || doc["ReturnCode"] < 1) {
         return false;
     }
 
@@ -349,12 +349,13 @@ bool GEHClient::connect() {
         return false;
     }
 
-    JsonObject& res = StaticJsonBuffer<512>().parse(buffer);
-    if (res.success() == false || res.containsKey("Data") == false || res["ReturnCode"] < 1) {
+    StaticJsonDocument<512> doc;
+    auto err = deserializeJson(doc, buffer);
+    if (err || doc.containsKey("Data") == false || doc["ReturnCode"] < 1) {
         return false;
     }
 
-    JsonObject& data = res["Data"];
+    JsonObject data = doc["Data"].as<JsonObject>();
     if (this->connectSocket(data["Host"].as<char *>()) == false) {
         return false;
     }
@@ -365,8 +366,8 @@ bool GEHClient::connect() {
 bool GEHClient::registerConnection(const char *aliasName, const char *id, const char *password, char *buffer) {
     char reqBuffer[512];
 
-    JsonObject& params = gelib::buildParamsRegistration(aliasName, id, password);
-    params.printTo(reqBuffer, 512);
+    auto params = gelib::buildParamsRegistration(aliasName, id, password);
+    serializeJson(params, reqBuffer);
 
     HTTPClient http;
     http.begin(this->baseURL + URL_REGISTER);
