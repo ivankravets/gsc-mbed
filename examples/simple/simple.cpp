@@ -60,7 +60,7 @@ void loop() {
 
   // Send message to yourself
   char buffer[] = "Goldeneye Technologies";
-  client->writeMessage(ALIASNAME, (uint8_t *)buffer, strlen(buffer));
+  client->writeMessage(ALIASNAME, (uint8_t *)buffer, strlen(buffer), true);
 
   lastTime = millis();
 }
