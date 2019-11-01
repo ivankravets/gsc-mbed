@@ -25,5 +25,7 @@ Library is used in Embedded System to connect to Goldeneye Hubs System.
 After running command `pio install GSCMbedLib`, PlatformIO will install GSCMbedLib and dependencies into your project.
 
 ## Dependencies
-- [ArduinoJSON](https://github.com/bblanchon/ArduinoJson) - 6.12.0
-- [Nanopb](https://github.com/nanopb/nanopb) - 0.3.9.2
+- [ArduinoJSON by Benoit Blanchon](https://github.com/bblanchon/ArduinoJson) - 6.12.0
+- [Nanopb by Petteri Aimonen](https://github.com/nanopb/nanopb) - 0.3.9.2
+- [BigNumber by NickGammon](https://github.com/nickgammon/BigNumber) - 3.5
+- [Crypto by Chris Ellis](https://github.com/intrbiz/arduino-crypto) - 1.0.0
