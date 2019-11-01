@@ -5,6 +5,8 @@ Library is used in Embedded System to connect to Goldeneye Hubs System.
 
 2. You should use [VSCode](https://code.visualstudio.com/) + [PlatformIO](https://platformio.org/) for development.
 
+3. Only using gsc-mbed version >= 2.2.0
+
 ## Install
 1. Download `gsc-services.json` from here (comming soon).
 
