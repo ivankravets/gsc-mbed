@@ -1,6 +1,6 @@
 {
     "name": "GSCMBedLib",
-    "keywords": "gsc, gelib, goldeneye, technologies, ge, geco",
+    "keywords": "gsc, gelib, goldeneye, technologies, ge, geco, hub",
     "description": "Library is used for microcontroller ESP with Arduino framework to connect to Goldeneye Hubs System.",
     "repository":
     {
@@ -30,9 +30,21 @@
             "version": "0.3.9.2",
             "authors": "Petteri Aimonen",
             "frameworks": "arduino"
+        },
+        {
+            "name": "BigNumber",
+            "version": "3.5",
+            "authors": "NickGammon",
+            "frameworks": "arduino"
+        },
+        {
+            "name": "Crypto",
+            "version": "1.0.0",
+            "authors": "Chris Ellis",
+            "frameworks": "arduino"
         }
     ],
-    "version": "2.0.1",
+    "version": "2.2.0",
     "frameworks": "arduino",
     "platforms": ["espressif32", "espressif8266"]
 }
