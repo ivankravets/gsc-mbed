@@ -30,7 +30,6 @@
 
 #include <Arduino.h>
 
-static inline bool is_base64(unsigned char c);
 std::string base64_decode(std::string const& encoded_string);
 
 #endif

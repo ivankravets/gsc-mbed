@@ -1,12 +1,9 @@
 #ifndef GEHCLIENT_H_
 #define GEHCLIENT_H_
 
-#include "GEHImport.h"
-#include "GEHQueue.h"
-#include "GEHListener.h"
-#include <gehub_message.pb.h>
-
-#define configTOTAL_HEAP_SIZE  ( 180 * 1024 )
+#include <GEHQueue.h>
+#include <GEHListener.h>
+#include <GEHBuilder.h>
 
 class GEHClient {
 private:
@@ -25,20 +22,19 @@ private:
     GEHListener *listener;
     gschub_Client client;
     gschub_ClientTicket clientTicket;
-    uint8_t secretKey[36];
+    GEHBuilder messageBuilder;
 
     GEHClient();
     bool connect();
     bool setupSecurity();
     bool registerConnection(char *buffer);
-    bool activateSocket(const gschub_Ticket &ticket);
+    bool activateSocket(const gschub_ClientTicket &ticket);
     bool connectSocket(const char *host);
 
     bool ping();
+    bool isOnline();
     void writeNextMessage();
-    gelib::GEHMessage readNextMessage();
-    gelib::GEHMessage parseReceivedMessage(const uint8_t *content, size_t length);
-    bool validateMessage(const uint8_t *content, size_t length, const uint8_t *expectedHMAC);
+    GEHMessage readNextMessage();
     bool setupConfig();
     String readConfig();
 public:

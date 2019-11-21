@@ -1,7 +1,6 @@
 #ifndef GEHSECURITY_H
 #define GEHSECURITY_H
 
-#include "GEHImport.h"
 #include "gehub_message.pb.h"
 
 #define GE_SECURITY_KEY_SIZE 32
