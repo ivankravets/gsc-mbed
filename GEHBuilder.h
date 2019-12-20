@@ -7,7 +7,7 @@
 #include <HTTPClient.h>
 
 #define MAX_MESSAGE_SIZE 16384 // 16kb
-#define BUFFER_SIZE 32768 // 32kb
+#define BUFFER_SIZE 20589 // ~20kb
 
 class GEHBuilder {
 private:
