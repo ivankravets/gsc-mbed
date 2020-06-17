@@ -28,6 +28,8 @@ GEHClient::GEHClient() {
     this->listener = nullptr;
     this->isOpened = false;
     this->lastErrorID = GEH_ERROR_NONE;
+    this->client.ID[0] = '\0';
+    this->client.token[0] = '\0';
     this->recvQueue = new GEHQueue(MAX_NUMBER_MESSAGE);
     this->writeQueue = new GEHQueue(MAX_NUMBER_MESSAGE);
 }
@@ -38,6 +40,12 @@ GEHClient::~GEHClient() {
     if (this->listener != nullptr) {
         delete this->listener;
     }
+}
+
+void GEHClient::setup(const char *baseURL, const char *id, const char *token) {
+    this->baseURL = String(baseURL);
+    strcpy(this->client.ID, id);
+    strcpy(this->client.token, token);
 }
 
 void GEHClient::nextMessage() {
@@ -63,7 +71,7 @@ bool GEHClient::open(const char *aliasName) {
         return true;
     }
 
-    if (this->setupConfig() == false) {
+    if (this->isConfigReady() == false && this->setupConfig() == false) {
         return false;
     }
     this->isOpened = true;
@@ -398,6 +406,10 @@ GEHMessage GEHClient::readNextMessage() {
     this->socket.readBytes(header, 4);
     memcpy(&length, header, 4);
     return this->messageBuilder.parseReceivedMessage(this->socket, length);
+}
+
+bool GEHClient::isConfigReady() {
+    return this->baseURL.length() != 0 && this->client.ID[0] != '\0' && this->client.token[0] != '\0';
 }
 
 bool GEHClient::setupConfig() {

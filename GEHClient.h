@@ -35,12 +35,14 @@ private:
     bool isOnline();
     void writeNextMessage();
     GEHMessage readNextMessage();
+    bool isConfigReady();
     bool setupConfig();
     String readConfig();
 public:
     static GEHClient* const Instance();
     ~GEHClient();
 
+    void setup(const char *baseURL, const char *id, const char *token);
     uint8_t getLastError();
     void setListener(GEHListener *listener);
     bool open(const char *aliasName);
