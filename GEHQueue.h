@@ -1,14 +1,8 @@
 #ifndef GEHQUEUE_H_
 #define GEHQUEUE_H_
 
-#include "GEHImport.h"
-
-namespace gelib {
-    struct GEHMessage {
-        size_t length;
-        uint8_t *content;
-    };
-}
+#include <GEHMessage.h>
+#include <FreeRTOS.h>
 
 class GEHQueue {
 private:
@@ -17,8 +11,8 @@ public:
     GEHQueue(int maxNumberMessage);
     bool isEmpty();
     bool isFull();
-    bool push(const gelib::GEHMessage& msg);
-    gelib::GEHMessage pop();
+    bool push(const GEHMessage& msg);
+    GEHMessage pop();
 };
 
 #endif // GEHQUEUE_H_

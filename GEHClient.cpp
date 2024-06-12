@@ -1,152 +1,22 @@
-#include "GEHClient.h"
-#include "GEHErrorDefine.h"
-#include <mbedtls/md.h>
+#include <GEHClient.h>
+#include <GEHRegistration.h>
+#include <GEHErrorDefine.h>
+#include <GEHSecurity.h>
+#include <GEHDefine.h>
 #include <WiFi.h>
-#include <pb_common.h>
-#include <pb.h>
-#include <pb_encode.h>
-#include <pb_decode.h>
-#include <gehub_message.pb.h>
 #include <SPIFFS.h>
+#include <NBase64.h>
+#include <base64.h>
+#include <ArduinoJson.h>
 
 
-#define CHARACTER_END_STRING '\0'
-#define MAX_LENGTH_READ_BUFFER 1600
-#define MAX_LENGTH_WRITE_BUFFER 1600
-#define MAX_NUMBER_MESSAGE 1024
+#define PING_TIME 1000 // // Only ping every 1 second
 
-#define VERSION "2.0"
+#define VERSION "2.2.0"
 #define FILE_CONFIG "/gsc-services.json"
-#define URL_REGISTER "/v1/conn/register"
-#define URL_RENAME_CONNECTION "/v1/conn/rename"
+#define URL_REGISTER "/conn/register"
+#define URL_SECURITY "/public-key"
 
-#define build_request(msgType, dest, encode_func, buffer, status)\
-    gschub_Letter letter = gschub_Letter_init_default;\
-    letter.type = msgType;\
-    letter.data.funcs.encode = encode_func;\
-    strcpy(letter.receiver, dest);\
-    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));\
-    status = pb_encode(&stream, gschub_Letter_fields, &letter)
-
-
-namespace gelib {
-    namespace message {
-        namespace {
-            SemaphoreHandle_t xTableMutex;
-            bool tableMessageID[MAX_NUMBER_MESSAGE];
-        }
-
-        void init() {
-            if (xTableMutex != NULL) {
-                return;
-            }
-            xTableMutex = xSemaphoreCreateMutex();
-            xSemaphoreGive(xTableMutex);
-        }
-
-        uint16_t registerNext() {
-            uint16_t msgID = MAX_NUMBER_MESSAGE;
-            if (xSemaphoreTake(xTableMutex, (TickType_t) 100) != pdTRUE) { // Waiting 1500ms
-                return msgID;
-            }
-
-            for (uint16_t idx = 0; idx < MAX_NUMBER_MESSAGE; ++idx) {
-                if (tableMessageID[idx] == false) {
-                    msgID = idx;
-                    break;
-                }
-            }
-
-            if (msgID < MAX_NUMBER_MESSAGE) {
-                tableMessageID[msgID] = true;
-            }
-            xSemaphoreGive(xTableMutex);
-            return msgID;
-        }
-
-        void unregister(uint16_t msgID) {
-            if (xSemaphoreTake(xTableMutex, (TickType_t) 100) != pdTRUE) { // Waiting 1500ms
-                return;
-            }
-            tableMessageID[msgID] = false;
-            xSemaphoreGive(xTableMutex);
-        }
-
-        bool isRegistered(uint16_t msgID) {
-            bool isRegistered = false;
-            if (xSemaphoreTake(xTableMutex, (TickType_t) 100) != pdTRUE) { // Waiting 1500ms
-                return isRegistered;
-            }
-            isRegistered = tableMessageID[msgID];
-            xSemaphoreGive(xTableMutex);
-            return isRegistered;
-        }
-    }
-
-    GEHMessage g_RequestMessage;
-    GEHMessage g_ReplyMessage;
-
-    uint8_t *buildRequest(const uint8_t *content, size_t length) {
-        uint8_t *msg = new uint8_t[length + 4]; // 4 bytes for value of length
-        memcpy(msg + 4, content, length);
-        for (int idx = 0; idx < 4; ++idx) {
-            msg[idx] = (uint8_t)length;
-            length >>= 8;
-        }
-        return msg;
-    }
-
-    gelib::GEHMessage buildResponse(const char *content, size_t length) {
-        uint8_t *data = new uint8_t[length];
-        memcpy(data, content, length);
-        return gelib::GEHMessage {
-            length,
-            data
-        };
-    }
-
-    JsonObject& buildParamsRegistration(const char *aliasName, const char *id, const char *password) {
-        StaticJsonBuffer<512> req;
-        JsonObject& params = req.createObject();
-        params["Id"] = id;
-        params["Token"] = password;
-        params["AliasName"] = aliasName;
-        params["Ver"] = VERSION;
-        return params;
-    }
-
-    JsonObject& buildParamsRenameConnection(const char *aliasName, const char *id, const char *token) {
-        StaticJsonBuffer<512> req;
-        JsonObject& params = req.createObject();
-        params["Id"] = id;
-        params["Token"] = token;
-        params["AliasName"] = aliasName;
-        return params;
-    }
-
-    bool encodePingMessage(pb_ostream_t *stream, const pb_field_t *field, void * const *arg) {
-        if (!pb_encode_tag_for_field(stream, field)) {
-            return false;
-        }
-        return pb_encode_string(stream, (uint8_t*)"Ping", 4);
-    }
-
-    bool encodeRequestMessage(pb_ostream_t *stream, const pb_field_t *field, void * const *arg) {
-        if (!pb_encode_tag_for_field(stream, field)) {
-            return false;
-        }
-        return pb_encode_string(stream, g_RequestMessage.content, g_RequestMessage.length);
-    }
-
-    bool decodeReplyMessage(pb_istream_t *stream, const pb_field_t *field, void **arg) {
-        if (stream->bytes_left > MAX_LENGTH_READ_BUFFER) {
-            return false;
-        }
-        size_t size = stream->bytes_left;
-        gelib::g_ReplyMessage.length = size;
-        return pb_read(stream, g_ReplyMessage.content, size);
-    }
-}
 
 GEHClient *GEHClient::Shared = new GEHClient();
 
@@ -155,11 +25,11 @@ GEHClient* const GEHClient::Instance() {
 }
 
 GEHClient::GEHClient() {
-    gelib::message::init();
-
-    this->listener = NULL;
+    this->listener = nullptr;
     this->isOpened = false;
     this->lastErrorID = GEH_ERROR_NONE;
+    this->client.ID[0] = '\0';
+    this->client.token[0] = '\0';
     this->recvQueue = new GEHQueue(MAX_NUMBER_MESSAGE);
     this->writeQueue = new GEHQueue(MAX_NUMBER_MESSAGE);
 }
@@ -167,17 +37,23 @@ GEHClient::GEHClient() {
 GEHClient::~GEHClient() {
     delete this->recvQueue;
     delete this->writeQueue;
-    if (this->listener != NULL) {
+    if (this->listener != nullptr) {
         delete this->listener;
     }
 }
 
+void GEHClient::setup(const char *baseURL, const char *id, const char *token) {
+    this->baseURL = String(baseURL);
+    strcpy(this->client.ID, id);
+    strcpy(this->client.token, token);
+}
+
 void GEHClient::nextMessage() {
-    vTaskDelay(1);
-    if (this->listener == NULL || this->recvQueue->isEmpty()) {
+    vTaskDelay(100);
+    if (this->listener == nullptr || this->recvQueue->isEmpty()) {
         return;
     }
-    gelib::GEHMessage msg = this->recvQueue->pop();
+    GEHMessage msg = this->recvQueue->pop();
     this->listener->onMessage(msg.content, msg.length);
     delete []msg.content;
 }
@@ -190,121 +66,122 @@ void GEHClient::setListener(GEHListener *listener) {
     this->listener = listener;
 }
 
-void GEHClient::open(const char *aliasName) {
+bool GEHClient::open(const char *aliasName) {
     if (this->isOpened) {
-        return;
+        return true;
     }
 
-    String strConfig = this->readConfig();
-    if (strConfig.length() == 0) {
-        return;
+    if (this->isConfigReady() == false && this->setupConfig() == false) {
+        return false;
     }
-
     this->isOpened = true;
-    JsonObject& config = StaticJsonBuffer<512>().parse(strConfig);
-    this->baseURL = String(config["host"].as<char *>());
-    strcpy(this->info.id, config["id"].as<char *>());
-    strcpy(this->info.password, config["token"].as<char *>());
-    strcpy(this->info.aliasName, aliasName);
+
+    strcpy(this->client.aliasName, aliasName);
     xTaskCreatePinnedToCore(
         GEHClient::loopAction,
         "GEHClient::loopAction",
-        5 * 1024, // 5 Kb
+        32 * 1024, // 32 Kb
         GEHClient::Shared,
         1,
         &this->loopActionTask,
         0
     );
-}
-
-bool GEHClient::renameConnection(const char *aliasName) {
-    char resBuffer[512];
-    char reqBuffer[512];
-
-    if (this->isOpened == false) {
-        return false;
-    }
-
-    JsonObject& params = gelib::buildParamsRenameConnection(
-        aliasName,
-        this->clientInfo.id,
-        this->clientInfo.token
-    );
-    params.printTo(reqBuffer, 512);
-
-    HTTPClient http;
-    http.begin(this->baseURL + URL_RENAME_CONNECTION);
-    http.addHeader("Content-Type", "application/json");
-    if (http.POST(reqBuffer) <= 0) {
-        http.end();
-        return false;
-    }
-    http.getString().toCharArray(resBuffer, 512);
-    http.end();
-
-    JsonObject& res = StaticJsonBuffer<512>().parse(resBuffer);
-    if (res.success() == false || res.containsKey("Data") == false || res["ReturnCode"] < 1) {
-        return false;
-    }
-
-    strcpy(this->info.aliasName, aliasName);
     return true;
 }
 
-uint16_t GEHClient::writeMessage(const char *receiver, uint8_t *content, size_t length) {
-    if (WiFi.status() != WL_CONNECTED) {
+bool GEHClient::renameConnection(const char *aliasName) {
+    if (this->isOnline() == false) {
         this->lastErrorID = GEH_ERROR_DISCONNECTED;
-        return 0;
+        return false;
+    }
+
+    // Get message's id
+    uint16_t msgID = GEHRegistration::Instance->registerNextMessage();
+    if (msgID == INVALID_MESSAGE_ID) {
+        this->lastErrorID = GEH_ERROR_NOT_ENOUGH_QUEUE;
+        return false;
+    }
+
+    // Build message
+    GEHMessage msg = this->messageBuilder.buildRenameMessage(
+        msgID,
+        aliasName,
+        clientTicket.connID,
+        clientTicket.token
+    );
+    if (msg.content == nullptr) {
+        this->lastErrorID = GEH_ERROR_NOT_ENOUGH_MEMORY;
+        GEHRegistration::Instance->unregisterMessage(msgID);
+        return false;
+    }
+
+    // Send message
+    const size_t numSendBytes = this->socket.write(
+        this->messageBuilder.getContent(msg),
+        msg.length
+    );
+    delete []msg.content;
+    GEHRegistration::Instance->unregisterMessage(msgID);
+
+    if (numSendBytes != msg.length) {
+        this->lastErrorID = GEH_ERROR_NOT_ENOUGH_MEMORY;
+        return false;
+    }
+
+    this->lastErrorID = GEH_ERROR_NONE;
+    strcpy(this->client.aliasName, aliasName);
+    return true;
+}
+
+uint16_t GEHClient::writeMessage(const char *receiver, uint8_t *content, size_t length, bool isEncrypted) {
+    if (this->isOnline() == false) {
+        this->lastErrorID = GEH_ERROR_DISCONNECTED;
+        return INVALID_MESSAGE_ID;
     }
 
     if (this->writeQueue->isFull()) {
         this->lastErrorID = GEH_ERROR_NOT_ENOUGH_QUEUE;
-        return 0;
+        return INVALID_MESSAGE_ID;
     }
 
-    uint16_t msgID = gelib::message::registerNext();
-    if (msgID == MAX_NUMBER_MESSAGE) {
+    // Get message's id
+    uint16_t msgID = GEHRegistration::Instance->registerNextMessage();
+    if (msgID == INVALID_MESSAGE_ID) {
         this->lastErrorID = GEH_ERROR_NOT_ENOUGH_QUEUE;
-        return 0;
+        return INVALID_MESSAGE_ID;
     }
 
-    // Build message
-    bool status;
-    gelib::g_RequestMessage.length = length;
-    gelib::g_RequestMessage.content = content;
-    uint8_t buffer[MAX_LENGTH_WRITE_BUFFER];
-    build_request(gschub_Letter_Type_Single, receiver, gelib::encodeRequestMessage, buffer, status);
-    if (!status) {
-        return 0;
+    GEHMessage msg = this->messageBuilder.buildMessage(
+        msgID,
+        gschub_Letter_Type_Single,
+        receiver,
+        content,
+        length,
+        isEncrypted
+    );
+    if (msg.content == nullptr) {
+        this->lastErrorID = GEH_ERROR_NOT_ENOUGH_MEMORY;
+        GEHRegistration::Instance->unregisterMessage(msgID);
+        return INVALID_MESSAGE_ID;
     }
-
-    // Prepare message
-    length = stream.bytes_written;
-    uint8_t *req = new uint8_t[length + 2];
-    memcpy(req + 2, buffer, length);
-    memcpy(req, &msgID, 2);
 
     // Push message to queue
-    bool result = this->writeQueue->push(gelib::GEHMessage{
-        length,
-        req
-    });
-
+    bool result = this->writeQueue->push(msg);
     if (result) {
         this->lastErrorID = GEH_ERROR_NONE;
         return msgID;
     }
-    delete []req;
-    gelib::message::unregister(msgID);
+    delete []msg.content;
     this->lastErrorID = GEH_ERROR_NOT_ENOUGH_QUEUE;
-    return 0;
+    GEHRegistration::Instance->unregisterMessage(msgID);
+    return INVALID_MESSAGE_ID;
 }
 
-uint16_t GEHClient::writeMessage(const char *receiver, uint8_t *content, size_t length, uint16_t msgID) {
-    if (msgID >= 0 && gelib::message::isRegistered(msgID)) {
+uint16_t GEHClient::writeMessage(const char *receiver, uint8_t *content, size_t length, uint16_t msgID, bool isEncrypted) {
+    if (msgID >= 0 && GEHRegistration::Instance->isMessageRegistered(msgID)) {
         return msgID;
     }
-    return this->writeMessage(receiver, content, length);
+    return this->writeMessage(receiver, content, length, isEncrypted);
 }
 
 /////////////////////
@@ -314,7 +191,7 @@ uint16_t GEHClient::writeMessage(const char *receiver, uint8_t *content, size_t 
 void GEHClient::loopAction(void *param) {
     GEHClient *instance = (GEHClient *)param;
     while(1) {
-        vTaskDelay(1);
+        vTaskDelay(100);
         if (WiFi.status() != WL_CONNECTED) {
             continue;
         }
@@ -322,6 +199,7 @@ void GEHClient::loopAction(void *param) {
         if (instance->socket.connected() == false || instance->ping() == false) {
             instance->socket.stop();
             if (instance->connect() == false) {
+                instance->socket.stop();
                 continue;
             }
         }
@@ -331,7 +209,7 @@ void GEHClient::loopAction(void *param) {
         if (!instance->socket.available()) {
             continue;
         }
-        gelib::GEHMessage msg = instance->readNextMessage();
+        GEHMessage msg = instance->readNextMessage();
         if (msg.length > 0 && instance->recvQueue->push(msg) == false) {
             delete []msg.content;
         }
@@ -340,43 +218,74 @@ void GEHClient::loopAction(void *param) {
 }
 
 bool GEHClient::connect() {
-    char buffer[512];
-    const char *id = this->info.id;
-    const char *password = this->info.password;
-    const char *aliasName = this->info.aliasName;
+    char body[512];
 
-    if (this->registerConnection(aliasName, id, password, buffer) == false) {
+    if (this->setupSecurity() == false) {
         return false;
     }
 
-    JsonObject& res = StaticJsonBuffer<512>().parse(buffer);
-    if (res.success() == false || res.containsKey("Data") == false || res["ReturnCode"] < 1) {
+    if (this->registerConnection(body) == false) {
         return false;
     }
 
-    JsonObject& data = res["Data"];
-    if (this->connectSocket(data["Host"].as<char *>()) == false) {
+    // Connect and activate
+    StaticJsonDocument<512> doc;
+    auto err = deserializeJson(doc, body);
+    if (err || doc.containsKey("data") == false || doc["returncode"].as<int>() < 1) {
+        DEBUG_LOG("Register connection failed");
+        DEBUG_LOG(doc["data"].as<char *>());
         return false;
     }
-
-    return this->authenSocket(data["ID"].as<char *>(), data["Token"].as<char *>());
+    std::string data = base64_decode(std::string(doc["data"].as<char *>()));
+    gschub_Ticket ticket = this->messageBuilder.parseTicket((uint8_t *)data.c_str(), data.length());
+    if (strlen(ticket.address) == 0 || this->connectSocket(ticket.address) == false) {
+        return false;
+    }
+    return this->activateSocket(ticket.clientTicket);
 }
 
-bool GEHClient::registerConnection(const char *aliasName, const char *id, const char *password, char *buffer) {
-    char reqBuffer[512];
-
-    JsonObject& params = gelib::buildParamsRegistration(aliasName, id, password);
-    params.printTo(reqBuffer, 512);
-
+bool GEHClient::setupSecurity() {
     HTTPClient http;
-    http.begin(this->baseURL + URL_REGISTER);
-    http.addHeader("Content-Type", "application/json");
-    if (http.POST(reqBuffer) <= 0) {
+
+    if (http.begin(this->baseURL + URL_SECURITY) == false) {
+        return false;
+    }
+
+    if (http.GET() <= 0) {
         http.end();
         return false;
     }
 
-    http.getString().toCharArray(buffer, 512);
+    char body[1024];
+    http.getString().toCharArray(body, 1024);
+    http.end();
+
+    StaticJsonDocument<1024> doc;
+    auto err = deserializeJson(doc, body);
+    if (err || doc.containsKey("data") == false || doc["returncode"] < 1) {
+        return false;
+    }
+    return GEHSecurity::Instance->setup(doc["data"].as<char *>());
+}
+
+bool GEHClient::registerConnection(char *output) {
+    GEHMessage msg = this->messageBuilder.buildRegistrationMessage(this->client);
+    if (msg.length == 0) {
+        return false;
+    }
+
+    // Send request
+    HTTPClient http;
+    http.begin(this->baseURL + URL_REGISTER);
+    http.addHeader("Version", VERSION);
+    http.addHeader("Content-Type", "application/json");
+    if (http.POST(base64::encode(msg.content, msg.length)) <= 0) {
+        http.end();
+        return false;
+    }
+
+    String content = http.getString();
+    content.toCharArray((char *)output, 512);
     http.end();
     return true;
 }
@@ -384,7 +293,7 @@ bool GEHClient::registerConnection(const char *aliasName, const char *id, const 
 bool GEHClient::connectSocket(const char *host) {
     try {
         char *socketIP = strtok((char *)host, ":");
-        int socketPort = atoi(strtok (NULL, ":"));
+        int socketPort = atoi(strtok (nullptr, ":"));
         return this->socket.connect(socketIP, socketPort) == 1;
     }
     catch(const std::exception& e) {
@@ -392,163 +301,128 @@ bool GEHClient::connectSocket(const char *host) {
     }
 }
 
-bool GEHClient::authenSocket(const char *id, const char *token) {
-    gschub_Ticket ticket = gschub_Ticket_init_default;
-    strcpy(ticket.connID, id);
-    strcpy(ticket.token, token);
+bool GEHClient::activateSocket(const gschub_ClientTicket &clientTicket) {
+    if (this->isOnline() == false) {
+        return false;
+    }
 
     // Build message
-    uint8_t buffer[gschub_Ticket_size];
-    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer));
-    bool status = pb_encode(&stream, gschub_Ticket_fields, &ticket);
-    if (!status) {
+    GEHMessage msg = this->messageBuilder.buildActivationMessage(clientTicket);
+
+    // Activate socket
+    const size_t numSendBytes = this->socket.write(
+        this->messageBuilder.getContent(msg),
+        msg.length
+    );
+    delete []msg.content;
+    if (numSendBytes != msg.length) {
         return false;
     }
-
-    // Authenticate
-    size_t len = stream.bytes_written;
-    uint8_t *data = gelib::buildRequest((uint8_t *)buffer, len);
-    const size_t numSendBytes = this->socket.write(data, len + 4);
-    delete []data;
-
-    if (numSendBytes != (len + 4)) {
-        return false;
-    }
-
-    // Setup keys
-    this->setupSecretKey();
-    strcpy(this->clientInfo.id, id);
-    strcpy(this->clientInfo.token, token);
+    strcpy(this->clientTicket.connID, clientTicket.connID);
+    strcpy(this->clientTicket.token, clientTicket.token);
     return true;
 }
 
 bool GEHClient::ping() {
+    if (this->isOnline() == false) {
+        return false;
+    }
+
     static volatile uint64_t lastTimePing = 0;
     uint64_t currentTime = millis();
-    if (lastTimePing + 1000 > currentTime) { // Only ping every 1 seconds
+    if (lastTimePing + PING_TIME > currentTime) {
         return true;
     }
 
+    // Get message's id
+    uint16_t msgID = GEHRegistration::Instance->registerNextMessage();
+    if (msgID == INVALID_MESSAGE_ID) {
+        return false;
+    }
+
     // Build message
-    bool status;
-    uint8_t buffer[512];
-    build_request(gschub_Letter_Type_Ping, "", gelib::encodePingMessage, buffer, status);
-    if (!status) {
+    const char *content = "Ping";
+    GEHMessage msg = this->messageBuilder.buildMessage(
+        msgID,
+        gschub_Letter_Type_Ping,
+        "",
+        (uint8_t *)content,
+        4,
+        true
+    );
+    if (msg.content == nullptr) {
+        GEHRegistration::Instance->unregisterMessage(msgID);
         return false;
     }
 
     // Ping
-    size_t len = stream.bytes_written;
-    uint8_t *data = gelib::buildRequest((uint8_t *)buffer, len);
-    const size_t numSendBytes = this->socket.write(data, len + 4);
-    delete []data;
-    if (numSendBytes != (len + 4)) {
-        lastTimePing = currentTime + 1000;
+    const size_t numSendBytes = this->socket.write(
+        this->messageBuilder.getContent(msg),
+        msg.length
+    );
+    GEHRegistration::Instance->unregisterMessage(msgID);
+    delete []msg.content;
+    if (numSendBytes != msg.length) {
+        lastTimePing = currentTime + PING_TIME;
         return false;
     }
     lastTimePing = currentTime;
     return true;
 }
 
-void GEHClient::setupSecretKey() {
-    uint8_t header[4];
-    size_t length;
-    this->socket.readBytes(header, 4);
-    memcpy(&length, header, 4);
-    this->socket.readBytes(this->info.secretKey, length);
-    this->info.secretKey[length] = CHARACTER_END_STRING;
+bool GEHClient::isOnline() {
+    return this->isOpened && WiFi.status() == WL_CONNECTED;
 }
 
 void GEHClient::writeNextMessage() {
-    static size_t pendingLength = -1;
-    static uint8_t *pendingData = NULL;
-    static uint16_t msgID = 0;
+    static GEHMessage msg {0, nullptr};
 
     // Get next message
-    if (pendingData == NULL) {
+    if (msg.content == nullptr) {
         if (this->writeQueue->isEmpty()) {
             return;
         }
-        gelib::GEHMessage msg = this->writeQueue->pop();
-        pendingData = gelib::buildRequest(msg.content + 2, msg.length);
-        memcpy(&msgID, msg.content, 2);
-        pendingLength = msg.length + 4;
-        delete []msg.content;
+        msg = this->writeQueue->pop();
     }
 
     // Send message
-    const size_t numSendBytes = this->socket.write(pendingData, pendingLength);
-    if (numSendBytes != pendingLength) {
+    const size_t numSendBytes = this->socket.write(
+        this->messageBuilder.getContent(msg),
+        msg.length
+    );
+    if (numSendBytes != msg.length) {
         return;
     }
-    delete []pendingData;
-    pendingLength = -1;
-    pendingData = NULL;
-    gelib::message::unregister(msgID);
+
+    // Clean
+    GEHRegistration::Instance->unregisterMessage(this->messageBuilder.getMsgID(msg));
+    delete []msg.content;
+    msg.content = nullptr;
 }
 
-gelib::GEHMessage GEHClient::readNextMessage() {
+GEHMessage GEHClient::readNextMessage() {
     uint8_t header[4];
     size_t length;
     this->socket.readBytes(header, 4);
     memcpy(&length, header, 4);
-
-    uint8_t *body = new uint8_t[length];
-    this->socket.readBytes(body, length);
-    gelib::GEHMessage msg = this->parseReceivedMessage(body, length);
-    delete []body;
-    return msg;
+    return this->messageBuilder.parseReceivedMessage(this->socket, length);
 }
 
-gelib::GEHMessage GEHClient::parseReceivedMessage(const uint8_t *content, size_t length) {
-    gelib::g_ReplyMessage = gelib::GEHMessage{
-        0,
-        new uint8_t[length]
-    };
-
-    // Parse message
-    gschub_Reply reply = gschub_Reply_init_default;
-    reply.data.funcs.decode = gelib::decodeReplyMessage;
-    pb_istream_t istream = pb_istream_from_buffer(content, length);
-    if (!pb_decode(&istream, gschub_Reply_fields, &reply)) {
-        delete []gelib::g_ReplyMessage.content;
-        return gelib::GEHMessage{
-            0,
-            NULL
-        };
-    }
-
-    // Validate message
-    if (!this->validateMessage(
-        gelib::g_ReplyMessage.content,
-        gelib::g_ReplyMessage.length,
-        reply.HMAC.bytes
-    )) {
-        delete []gelib::g_ReplyMessage.content;
-        return gelib::GEHMessage{
-            0,
-            NULL
-        };
-    }
-    return gelib::g_ReplyMessage;
+bool GEHClient::isConfigReady() {
+    return this->baseURL.length() != 0 && this->client.ID[0] != '\0' && this->client.token[0] != '\0';
 }
 
-bool GEHClient::validateMessage(const uint8_t *content, size_t length, const uint8_t *expectedHMAC) {
-    byte hmacResult[32];
-    mbedtls_md_context_t ctx;
-    mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
-    mbedtls_md_init(&ctx);
-    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 1);
-    mbedtls_md_hmac_starts(&ctx, (const unsigned char *) this->info.secretKey, strlen(this->info.secretKey));
-    mbedtls_md_hmac_update(&ctx, content, length);
-    mbedtls_md_hmac_finish(&ctx, hmacResult);
-    mbedtls_md_free(&ctx);
-
-    for(int idx = 0; idx < sizeof(hmacResult); idx++){
-        if (hmacResult[idx] != expectedHMAC[idx]) {
-            return false;
-        }
+bool GEHClient::setupConfig() {
+    String strConfig = this->readConfig();
+    if (strConfig.length() == 0) {
+        return false;
     }
+
+    StaticJsonDocument<1024> config;
+    deserializeJson(config, strConfig);
+    this->baseURL = String(config["host"].as<char *>());
+    strcpy(this->client.ID, config["id"].as<char *>());
+    strcpy(this->client.token, config["token"].as<char *>());
     return true;
 }
 

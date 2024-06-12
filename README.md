@@ -5,6 +5,8 @@ Library is used in Embedded System to connect to Goldeneye Hubs System.
 
 2. You should use [VSCode](https://code.visualstudio.com/) + [PlatformIO](https://platformio.org/) for development.
 
+3. Only using gsc-mbed version >= 2.2.0
+
 ## Install
 1. Download `gsc-services.json` from here (comming soon).
 
@@ -12,82 +14,20 @@ Library is used in Embedded System to connect to Goldeneye Hubs System.
 
 3. Run command: `pio install GSCMbedLib`.
 
-4. This library uses [`nanopb`](https://github.com/nanopb/nanopb) to parse messages, you need to download and keep below files in folder `lib/grpc` of your project PlatformIO (create folder `grpc` if it is not existed)
-- pb.h
-- pb_common.c
-- pb_common.h
-- pb_decode.c
-- pb_decode.h
-- pb_encode.c
-- pb_encode.h
-
-## Example
-
+4. In file `pb.h` of dependency Nanopb
 ```c++
-#include <Arduino.h>
-#include <WiFi.h>
-#include <esp_wifi.h>
-#include <GEHClient.h>
+// Uncomment this line
+#define PB_FIELD_16BIT 1
 
-// Other connections will send messages to yours by this ALIASNAME
-#define ALIASNAME {ALIASNAME}
-
-// Information of your WiFi
-#define WIFI_SSID {WIFI_SSID}
-#define WIFI_PSWD {WIFI_PSWD}
-
-// GEListener will listen comming messages
-class GEListener: public GEHListener {
-  void onMessage(const uint8_t *msg, const size_t length) {
-    for(size_t idx = 0; idx < length; ++idx) {
-      Serial.print((char)msg[idx]);
-    }
-    Serial.println();
-  }
-};
-
-int32_t lastTime = 0;
-GEListener *listener = new GEListener();
-GEHClient *client = GEHClient::Instance();
-
-void setup() {
-  Serial.begin(115200);
-
-  // Setup WiFi
-  WiFi.enableAP(false);
-  WiFi.disconnect();
-  WiFi.begin(WIFI_SSID, WIFI_PSWD);
-  WiFi.mode(WIFI_STA);
-  esp_wifi_set_ps(WIFI_PS_NONE); // Turn off Power Safe mode
-
-  // Waiting for connecting to the WiFi
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.print(".");
-  }
-  Serial.println();
-  Serial.println("Connected WiFi");
-
-  // Register object which will receive comming messages
-  client->setListener(listener);
-  
-  // Open connection to Goldeneye Hubs System with the ALIASNAME
-  client->open(ALIASNAME);
-}
-
-void loop() {
-  // Read next message
-  client->nextMessage();
-
-  // Send message every 3 seconds
-  if (lastTime + 3000 > millis()) {
-    return;
-  }
-
-  // Send message to yourself
-  char buffer[] = "Goldeneye Technologies";
-  client->writeMessage(ALIASNAME, (uint8_t *)buffer, strlen(buffer));
-
-  lastTime = millis();
-}
+// Add this line 
+#define PB_WITHOUT_64BIT 1
 ```
+
+## Note
+After running command `pio install GSCMbedLib`, PlatformIO will install GSCMbedLib and dependencies into your project.
+
+## Dependencies
+- [ArduinoJSON by Benoit Blanchon](https://github.com/bblanchon/ArduinoJson) - 6.12.0
+- [Nanopb by Petteri Aimonen](https://github.com/nanopb/nanopb) - 0.3.9.2
+- [BigNumber by NickGammon](https://github.com/nickgammon/BigNumber) - 3.5
+- [Crypto by Chris Ellis](https://github.com/intrbiz/arduino-crypto) - 1.0.0

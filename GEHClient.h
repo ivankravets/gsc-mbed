@@ -1,21 +1,9 @@
 #ifndef GEHCLIENT_H_
 #define GEHCLIENT_H_
 
-#include "GEHImport.h"
-#include "GEHQueue.h"
-#include "GEHListener.h"
-
-struct GEHConnInfo {
-    char id[26];
-    char password[257];
-    char aliasName [26];
-    char secretKey[13];
-};
-
-struct GEHClientInfo {
-    char id[26];
-    char token[257];
-};
+#include <GEHQueue.h>
+#include <GEHListener.h>
+#include <GEHBuilder.h>
 
 class GEHClient {
 private:
@@ -32,32 +20,35 @@ private:
     GEHQueue *recvQueue;
     GEHQueue *writeQueue;
     GEHListener *listener;
-    GEHConnInfo info;
-    GEHClientInfo clientInfo;
+    gschub_Client client;
+    gschub_ClientTicket clientTicket;
+    GEHBuilder messageBuilder;
 
     GEHClient();
     bool connect();
-    bool registerConnection(const char *aliasName, const char *id, const char *password, char *buffer);
-    bool authenSocket(const char *id, const char *token);
+    bool setupSecurity();
+    bool registerConnection(char *buffer);
+    bool activateSocket(const gschub_ClientTicket &ticket);
     bool connectSocket(const char *host);
 
     bool ping();
-    void setupSecretKey();
+    bool isOnline();
     void writeNextMessage();
-    gelib::GEHMessage readNextMessage();
-    gelib::GEHMessage parseReceivedMessage(const uint8_t *content, size_t length);
-    bool validateMessage(const uint8_t *content, size_t length, const uint8_t *expectedHMAC);
+    GEHMessage readNextMessage();
+    bool isConfigReady();
+    bool setupConfig();
     String readConfig();
 public:
     static GEHClient* const Instance();
     ~GEHClient();
 
+    void setup(const char *baseURL, const char *id, const char *token);
     uint8_t getLastError();
     void setListener(GEHListener *listener);
-    void open(const char *aliasName);
+    bool open(const char *aliasName);
     bool renameConnection(const char *aliasName);
-    uint16_t writeMessage(const char *receiver, uint8_t *content, size_t length);
-    uint16_t writeMessage(const char *receiver, uint8_t *content, size_t length, uint16_t msgID);
+    uint16_t writeMessage(const char *receiver, uint8_t *content, size_t length, bool isEncrypted);
+    uint16_t writeMessage(const char *receiver, uint8_t *content, size_t length, uint16_t msgID, bool isEncrypted);
 
     // Invoke this method in main loop
     void nextMessage();

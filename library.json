@@ -1,0 +1,50 @@
+{
+    "name": "GSCMBedLib",
+    "keywords": "gsc, gelib, goldeneye, technologies, ge, geco, hub",
+    "description": "Library is used for microcontroller ESP with Arduino framework to connect to Goldeneye Hubs System.",
+    "repository":
+    {
+        "type": "git",
+        "url": "https://github.com/gecosys/gsc-mbed.git"
+    },
+    "authors":
+    [
+        {
+            "name": "Tri Dao",
+            "email": "minhtri1396@gmail.com",
+            "url": "https://www.facebook.com/dmt1396",
+            "maintainer": true
+        }
+    ],
+    "examples": "examples/*/*.cpp",
+    "dependencies":
+    [
+        {
+            "name": "ArduinoJson",
+            "version": "6.12.0",
+            "authors": "Benoit Blanchon",
+            "frameworks": "arduino"
+        },
+        {
+            "name": "Nanopb",
+            "version": "0.3.9.2",
+            "authors": "Petteri Aimonen",
+            "frameworks": "arduino"
+        },
+        {
+            "name": "BigNumber",
+            "version": "3.5",
+            "authors": "NickGammon",
+            "frameworks": "arduino"
+        },
+        {
+            "name": "Crypto",
+            "version": "1.0.0",
+            "authors": "Chris Ellis",
+            "frameworks": "arduino"
+        }
+    ],
+    "version": "2.2.4",
+    "frameworks": "arduino",
+    "platforms": ["espressif32", "espressif8266"]
+}
